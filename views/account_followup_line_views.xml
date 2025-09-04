@@ -44,7 +44,7 @@
                                 </group>
                                 <group string="Options" name="options" colspan="1">
                                     <field name="auto_execute"/>
-                                    <field name="join_invoices" invisible="not send_email"/>
+                                    <field name="join_invoices" invisible="1" readonly="1"/>
                                     <field name="additional_follower_ids" invisible="not send_email"
                                            widget="many2many_tags_avatar"/>
                                 </group>

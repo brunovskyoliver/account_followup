@@ -32,14 +32,40 @@ class IrActionsReport(models.Model):
                 attachments = self.env['ir.attachment'].browse(options.get('attachment_ids'))
             else:
                 invoices = partner._get_invoices_to_print(options)
-                attachments = invoices.message_main_attachment_id  # existence guaranteed by _get_invoices_to_print
+                pdf_attachments = []
+                
+                # Get or generate PDF for each invoice
+                for invoice in invoices:
+                    # First try to find an existing PDF attachment for this invoice
+                    existing_pdf = self.env['ir.attachment'].search([
+                        ('res_model', '=', invoice._name),
+                        ('res_id', '=', invoice.id),
+                        ('mimetype', '=', 'application/pdf'),
+                    ], limit=1)
+                    
+                    if existing_pdf:
+                        pdf_attachments.append(existing_pdf)
+                    else:
+                        # Generate new PDF if none exists
+                        pdf_content = invoice._render_qweb_pdf()[0]
+                        attachment = self.env['ir.attachment'].create({
+                            'name': f"{invoice.name}.pdf",
+                            'type': 'binary',
+                            'datas': pdf_content,
+                            'mimetype': 'application/pdf',
+                            'res_model': invoice._name,
+                            'res_id': invoice.id,
+                            'description': 'Generated PDF for followup email'  # Mark it as generated for followup
+                        })
+                        pdf_attachments.append(attachment)
+                
+                attachments = pdf_attachments
 
             writer = OdooPdfFileWriter()
 
-            # Fill writer with the followup report followed by the invoices
-            followup_stream = res[partner_id]['stream']
-            input_streams = [followup_stream] + [to_pdf_stream(attachment) for attachment in attachments
-                                                 if attachment.mimetype == 'application/pdf']
+            # Only include the invoice PDFs
+            input_streams = [to_pdf_stream(attachment) for attachment in attachments
+                            if attachment.mimetype == 'application/pdf']
             for stream in input_streams:
                 reader = OdooPdfFileReader(stream, strict=False)
                 writer.appendPagesFromReader(reader)
