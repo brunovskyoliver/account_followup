@@ -82,13 +82,20 @@ class FollowupLine(models.Model):
 
         The next date will be typically set in (next level delay - current level delay) days
         There are 3 exceptions to this:
-        - no next level -> next date set in (current level delay - previous level delay) days
+        - no next level -> next date set in 3 days for last level, otherwise (current level delay - previous level delay) days
         - no next level AND only 1 level -> next date set in (current level delay) days
         - no level at all -> next date not set (handled by partner, this method won't be called)
         """
         self.ensure_one()
         next_followup = self._get_next_followup()
-        if next_followup:
+        
+        # Check if we're at the last followup level
+        is_last_level = next_followup == self
+        
+        if is_last_level:
+            # For the last level, always set next date to 3 days from today
+            delay = 3
+        elif next_followup:
             delay = next_followup.delay - self.delay
         else:
             previous_followup = self._get_previous_followup()
@@ -100,7 +107,10 @@ class FollowupLine(models.Model):
 
     def _get_next_followup(self):
         self.ensure_one()
-        return self.env['account_followup.followup.line'].search([('delay', '>', self.delay), ('company_id', '=', self.env.company.id)], order="delay asc", limit=1)
+        next_level = self.env['account_followup.followup.line'].search([('delay', '>', self.delay), ('company_id', '=', self.env.company.id)], order="delay asc", limit=1)
+        if not next_level:
+            return self
+        return next_level
 
     def _get_previous_followup(self):
         self.ensure_one()
