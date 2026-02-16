@@ -387,15 +387,16 @@ class ResPartner(models.Model):
         return f"""
             SELECT partner.id as partner_id,
                    ful.id as followup_line_id,
-                   CASE WHEN partner.balance <= 0 THEN 'no_action_needed'
-                        WHEN in_need_of_action_aml.id IS NOT NULL AND (followup_next_action_date IS NULL OR followup_next_action_date <= %(current_date)s) THEN 'in_need_of_action'
+                   CASE WHEN partner.total_overdue <= 0 THEN 'no_action_needed'
+                        WHEN partner.total_overdue > 0 AND in_need_of_action_aml.id IS NOT NULL AND (followup_next_action_date IS NULL OR followup_next_action_date <= %(current_date)s) THEN 'in_need_of_action'
                         WHEN exceeded_unreconciled_aml.id IS NOT NULL THEN 'with_overdue_invoices'
                         ELSE 'no_action_needed' END as followup_status
             FROM (
           SELECT partner.id,
                  {self.env.cr.mogrify(ResPartner._field_to_sql('partner', 'followup_next_action_date')).decode(self.env.cr.connection.encoding)} AS followup_next_action_date,
                  MAX(COALESCE(next_ful.delay, ful.delay)) as followup_delay,
-                 SUM(aml.balance) as balance
+                 SUM(aml.balance) as balance,
+                 SUM(CASE WHEN aml.date_maturity < %(current_date)s THEN aml.balance ELSE 0 END) as total_overdue
             FROM res_partner partner
             JOIN account_move_line aml ON aml.partner_id = partner.id
             JOIN account_account account ON account.id = aml.account_id
